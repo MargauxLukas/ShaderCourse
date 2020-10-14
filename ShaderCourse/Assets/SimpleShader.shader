@@ -2,7 +2,8 @@
 {
     Properties
     {
-        _Color("Color", Color) = (1,1,1,0)
+        _Color("Color", Color) = (1,1,1,1)
+        _Gloss("Gloss", Float) = 1
         //_MainTex ("Texture", 2D) = "white" {}
     }
     SubShader
@@ -46,13 +47,14 @@
             //float4 _MainTex_ST;
 
             uniform float4 _Color;
+            float _Gloss;
 
             //Vertex shader function
             VertexOutput vert (VertexInput v)
             {
                 VertexOutput o;
                 o.uv0 = v.uv0; //take the uv from mesh, pass it through VertexOutput function which output data read by the frag. shader
-                o.normal = v.normal; 
+                o.normal = v.normal;
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex); //can't read a position, need to multiply matrix with this Unity function to transform vertex from local space to world space
                 o.clipSpacePos = UnityObjectToClipPos(v.vertex); //can skip lines above and under by just returning clipSpacePos (example below)
                 return o;
@@ -74,19 +76,38 @@
 
             //float / fixed / half --> different levels of precision, usually use float which is the most precise //fixed and half mostly use for non desktop applications (like mobile)
 
+            //created for a personalized lerp 
+            float3 MyLerp(float3 a, float3 b, float t) 
+            {
+                return t*b + (1.0 - t)*a;
+            }
+
             //returns a color
             float4 frag(VertexOutput i) : SV_Target
             {
                 float2 uv = i.uv0; //get the uv from the VertexOutput in parameters
-                //float3 normals = i.normal * 0.5 + 0.5; //i.normal is -1 to 1 (= 2) to get the normals go from 0 to 1, need to divide it by 2 and add 0.5 
 
-                        //LIGHTING\\
-                    //__Direct diffuse Light__
+                    //__Color Gradient__
+                float3 colorA = float3(.1, .8, 1); //define 2 colors
+                float3 colorB = float3(1, .1, .8);
+                //float t = step(uv.y, .5); //to do a harsh cutoff but with a lerp function
+                float t = uv.y;
+                float3 blend = MyLerp(colorA, colorB, t); //interpolate between them then return result
+
+                return float4(blend, 0);
+
+                //float3 normals = i.normal * 0.5 + 0.5; //i.normal is -1 to 1 (= 2) to get the normals go from 0 to 1, need to divide it by 2 and add 0.5 
+                float3 normal = normalize(i.normal); //Interpolated normals normalized to only have lenght = 1 and have a smooth render
+
+                        //__LIGHTING__
                 //float3 lightDir = normalize(float3 (1, 1, 1)) //to do hard code lighting (not real lighting, faking a light source), declare a light direction
-                float3 lightDir = _WorldSpaceLightPos0.xyz; //to do lighting using Unity lights
-                float3 lightFalloff = saturate(dot(lightDir, i.normal)); //saturate clamps values between 0 to 1 //can use max(0, yourValue)
+                float3 lightDir = _WorldSpaceLightPos0.xyz; //to do lighting using Unity lights  
                 //float3 lightColor = float3(.9, .85, .7);
                 float3 lightColor = _LightColor0.rgb; //to do lighting using Unity lights
+
+                    //__Direct diffuse Light__
+                float3 lightFalloff = saturate(dot(lightDir, normal)); //saturate clamps values between 0 to 1 //can use max(0, yourValue)
+                lightFalloff = step(.1, lightFalloff); //for cell shading/toon shading
                 float3 directDiffuseLight = lightColor * lightFalloff; //the light source color basically
 
                     //__Ambient Light__
@@ -97,18 +118,23 @@
                 float3 fragToCam = camPos - i.worldPos;
                 float3 viewDir = normalize(fragToCam);
 
-                return float4(viewDir, 1);
+                    //__Phong (Specular Highlights)__
+                float3 viewReflect = reflect(-viewDir, normal); //view reflection
+                float3 specularFalloff = max(0, dot(viewReflect, lightDir)); //add glossiness
+                specularFalloff = pow(specularFalloff, _Gloss); //modify gloss by adding a new variable _Gloss and make your specularFalloff power _Gloss
+                specularFalloff = step(.1, specularFalloff); //for cell shading/toon shading
+                float3 directSpecular = specularFalloff * lightColor;
 
                     //__Composite__
                 float3 diffuseLight = ambientLight + directDiffuseLight;
-                float3 finalSurfaceColor = diffuseLight * _Color.rgb; //color of the suface affected by lighting
+                float3 finalSurfaceColor = diffuseLight * _Color.rgb + directSpecular; //color of the suface affected by lighting plus specular light
 
                 return float4(finalSurfaceColor, 0);
                 //display uv in xy coords (float2) //output uv will render the 2D uv tex on the sphere, where x is red channel and y is green channel of the color output
                 //display only positive normals (0 to 1) and you have a usable normal map
                 //display light by returning .xxx coords, light not having y and z coords. For a pure white light display lightFalloff.xxx. For a colored light, display directDiffuseLight
                 //display diffuseLight for a more realistic light //sum can go >1, depends on light source etc, >1 will turn color to a pure white
-                //display finalSurfaceColor for a diffuse color, affected by color, light source & ambient light
+                //display finalSurfaceColor for a diffuse color, affected by color, light source, ambient light & specular light
                 //debug world position by returning i.worldPos, random alpha (1 is good)
             }
 
