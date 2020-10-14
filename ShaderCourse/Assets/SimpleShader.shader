@@ -48,6 +48,7 @@
 
             uniform float4 _Color;
             float _Gloss;
+            uniform float4
 
             //Vertex shader function
             VertexOutput vert (VertexInput v)
@@ -82,19 +83,38 @@
                 return t*b + (1.0 - t)*a;
             }
 
+            //there is no InvLerp in shader language, have to do it manually
+            float InvLerp(float3 a, float3 b, float value) 
+            {
+                return (value - a) / (b - a);
+            }
+
+            float Posterize(float steps, float value) 
+            {
+                return floor(value * steps) / steps;
+            }
+
             //returns a color
             float4 frag(VertexOutput i) : SV_Target
             {
                 float2 uv = i.uv0; //get the uv from the VertexOutput in parameters
 
                     //__Color Gradient__
-                float3 colorA = float3(.1, .8, 1); //define 2 colors
-                float3 colorB = float3(1, .1, .8);
+                //float3 colorA = float3(.1, .8, 1); //define 2 colors
+                //float3 colorB = float3(1, .1, .8);
                 //float t = step(uv.y, .5); //to do a harsh cutoff but with a lerp function
-                float t = uv.y;
-                float3 blend = MyLerp(colorA, colorB, t); //interpolate between them then return result
+                //float t = uv.y; //use this for lerp
+                //float t = InvLerp(.25, .75, uv.y); //use this for InvLerp
+                //float t = smoothstep(.25, .75, uv.y); // smoothstep is basically the same as InvLerp but with a curve applied which makes it smoother
+                //t = round(t * 8) / 8; //use this for a steppy gradient 
+                //t = floor(t * 8) / 8; //or this, depends on what alignment is needed
+                //t = Posterize(16, t); //same but with a function, can be used for lighting (cf specularFalloff & lightFalloff funcs)
 
-                return float4(blend, 0);
+                //return t; //debug
+
+                //float3 blend = MyLerp(colorA, colorB, t); //interpolate between them then return result
+
+                //return float4(blend, 0); //debug
 
                 //float3 normals = i.normal * 0.5 + 0.5; //i.normal is -1 to 1 (= 2) to get the normals go from 0 to 1, need to divide it by 2 and add 0.5 
                 float3 normal = normalize(i.normal); //Interpolated normals normalized to only have lenght = 1 and have a smooth render
@@ -107,7 +127,8 @@
 
                     //__Direct diffuse Light__
                 float3 lightFalloff = saturate(dot(lightDir, normal)); //saturate clamps values between 0 to 1 //can use max(0, yourValue)
-                lightFalloff = step(.1, lightFalloff); //for cell shading/toon shading
+                //lightFalloff = step(.1, lightFalloff); //for cell shading/toon shading
+                //lightFalloff = Posterize(4, lightFalloff); //steps gradient
                 float3 directDiffuseLight = lightColor * lightFalloff; //the light source color basically
 
                     //__Ambient Light__
@@ -122,7 +143,8 @@
                 float3 viewReflect = reflect(-viewDir, normal); //view reflection
                 float3 specularFalloff = max(0, dot(viewReflect, lightDir)); //add glossiness
                 specularFalloff = pow(specularFalloff, _Gloss); //modify gloss by adding a new variable _Gloss and make your specularFalloff power _Gloss
-                specularFalloff = step(.1, specularFalloff); //for cell shading/toon shading
+                //specularFalloff = step(.1, specularFalloff); //for cell shading/toon shading
+                //specularFalloff = Posterize(4, specularFalloff); //steps gradient
                 float3 directSpecular = specularFalloff * lightColor;
 
                     //__Composite__
